@@ -11,14 +11,22 @@ int main(int argc, char **argv) {
     tju_sock_addr bind_addr;
     bind_addr.ip = inet_network("172.17.0.3");
     bind_addr.port = 1234;
+    
+    if(tju_bind(my_server, bind_addr) != 0 ){
+        printf("failed bind sock!\n");
+        exit(-1);
+    }
 
-    tju_bind(my_server, bind_addr);
-
-    tju_listen(my_server);
-    // printf("my_server state %d\n", my_server->state);
-
+    if(tju_listen(my_server) != 0 ){
+        printf("failed bind sock!\n");
+        exit(-1);
+    }
+    
+    /* printf("my_server state %d\n", my_server->state); */
+    /* printf("sock accepting ......\n"); */
     tju_tcp_t* new_conn = tju_accept(my_server);
-    // printf("new_conn state %d\n", new_conn->state);      
+    /* printf("new_conn state %d\n", new_conn->state);    */   
+    /* printf("sock accepted !\n"); */
 
     // uint32_t conn_ip;
     // uint16_t conn_port;

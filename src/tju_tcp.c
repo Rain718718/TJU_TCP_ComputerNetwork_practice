@@ -1,5 +1,10 @@
 #include "tju_tcp.h"
 
+#define SYN_SEQ 100
+#define SYN_ACK 0
+#define SYNACK_SEQ 300
+
+
 /*
 创建 TCP socket 
 初始化对应的结构体
@@ -55,36 +60,37 @@ int tju_listen(tju_tcp_t* sock){
 因为只要该函数返回, 用户就可以马上使用该socket进行send和recv
 */
 tju_tcp_t* tju_accept(tju_tcp_t* listen_sock){
+    //确保建立连接时的初始状态
+    if(listen_sock->state != LISTEN){
+        printf("The listen_sock state is not LISTEN while calling tju_accep!\n");
+        exit(-1);
+    }
     tju_tcp_t* new_conn = (tju_tcp_t*)malloc(sizeof(tju_tcp_t));
     memcpy(new_conn, listen_sock, sizeof(tju_tcp_t));
+    connecting_sock = new_conn;
 
-    tju_sock_addr local_addr, remote_addr;
-    /*
-     这里涉及到TCP连接的建立
-     正常来说应该是收到客户端发来的SYN报文
-     从中拿到对端的IP和PORT
-     换句话说 下面的处理流程其实不应该放在这里 应该在tju_handle_packet中
-    */ 
-    remote_addr.ip = inet_network("172.17.0.2");  //具体的IP地址
-    remote_addr.port = 5678;  //端口
+    
+    /* printf("等待第一次握手\n"); */
+    //等待对方发起的第一次握手
+    while(listen_sock->state == LISTEN){}
+    //跳出后状态为SYN-RECEIVED
+    /* printf("第一次握手成功\n"); */
 
-    local_addr.ip = listen_sock->bind_addr.ip;  //具体的IP地址
-    local_addr.port = listen_sock->bind_addr.port;  //端口
+    /* printf("发出第二次握手\n"); */
+    //发起第二次握手
+    char * synack = create_packet_buf(listen_sock->bind_addr.port, listen_sock->established_remote_addr.port, SYNACK_SEQ ,SYN_SEQ+1,
+        DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN , SYNACK_FLAG_MASK, 1, 0, NULL, 0);
+    sendToLayer3(synack,DEFAULT_HEADER_LEN);
 
-    new_conn->established_local_addr = local_addr;
-    new_conn->established_remote_addr = remote_addr;
+    /* printf("等待第三次握手\n"); */
+    //等待对方发起的第三次握手
+    while(listen_sock->state == SYN_RECV){}
+    //跳出后状态为ESTABLISHED
+    /* printf("第三次握手成功\n"); */
 
-    // 这里应该是经过三次握手后才能修改状态为ESTABLISHED
+    //此后listensock要重新回到侦听状态
+    listen_sock->state = LISTEN;
     new_conn->state = ESTABLISHED;
-
-    // 将新的conn放到内核建立连接的socket哈希表中
-    int hashval = cal_hash(local_addr.ip, local_addr.port, remote_addr.ip, remote_addr.port);
-    established_socks[hashval] = new_conn;
-
-    // 如果new_conn的创建过程放到了tju_handle_packet中 那么accept怎么拿到这个new_conn呢
-    // 在linux中 每个listen socket都维护一个已经完成连接的socket队列
-    // 每次调用accept 实际上就是取出这个队列中的一个元素
-    // 队列为空,则阻塞 
     return new_conn;
 }
 
@@ -97,24 +103,41 @@ tju_tcp_t* tju_accept(tju_tcp_t* listen_sock){
 因为只要该函数返回, 用户就可以马上使用该socket进行send和recv
 */
 int tju_connect(tju_tcp_t* sock, tju_sock_addr target_addr){
-
+    if(sock->state != CLOSED){
+        printf("Sock is CLOSED while calling connect!");
+        exit(-1);
+    }
+    connecting_sock = sock;
     sock->established_remote_addr = target_addr;
-
     tju_sock_addr local_addr;
     local_addr.ip = inet_network("172.17.0.2");
     local_addr.port = 5678; // 连接方进行connect连接的时候 内核中是随机分配一个可用的端口
     sock->established_local_addr = local_addr;
 
+
+    //先发送一个SYN段，<SEQ=100><CTL=SYN> ，第一次握手
+    /* printf("发出第一次握手\n"); */
+    char * syn = create_packet_buf(local_addr.port, target_addr.port, SYN_SEQ ,SYN_ACK,
+        DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN , SYN_FLAG_MASK, 1, 0, NULL, 0);
+    sendToLayer3(syn,DEFAULT_HEADER_LEN);
+    sock->state = SYN_SENT;
+    
+    /* printf("等待第二次握手\n"); */
+    //等待客户端的SYNACK段，等待对方发出第二次握手
+    while(sock->state == SYN_SENT){} 
+    //得到回应后变为建立状态也就是ESTABLISHED
+    /* printf("第二次握手成功\n"); */
+
+    //再发送一个ack,发起第三次握手
+    /* printf("发出第三次握手\n"); */
+    char * ack = create_packet_buf(local_addr.port, target_addr.port, SYN_SEQ+1 ,SYNACK_SEQ+1,
+        DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN , ACK_FLAG_MASK, 1, 0, NULL, 0);
+    sendToLayer3(ack,DEFAULT_HEADER_LEN);
     // 这里也不能直接建立连接 需要经过三次握手
     // 实际在linux中 connect调用后 会进入一个while循环
     // 循环跳出的条件是socket的状态变为ESTABLISHED 表面看上去就是 正在连接中 阻塞
     // 而状态的改变在别的地方进行 在我们这就是tju_handle_packet
-    sock->state = ESTABLISHED;
-
-    // 将建立了连接的socket放入内核 已建立连接哈希表中
-    int hashval = cal_hash(local_addr.ip, local_addr.port, target_addr.ip, target_addr.port);
-    established_socks[hashval] = sock;
-
+    
     return 0;
 }
 
@@ -167,7 +190,53 @@ int tju_recv(tju_tcp_t* sock, void *buffer, int len){
 }
 
 int tju_handle_packet(tju_tcp_t* sock, char* pkt){
-    
+    //如果是一个握手包则要更改sock的状态
+    uint8_t pktflag = get_flags(pkt);
+    uint16_t remote_port = get_src(pkt);
+
+    //如果是第一次握手包，说明sock是listensock，此时把远端的ip和端口填写
+    if(pktflag == SYN_FLAG_MASK){
+        sock->established_remote_addr.port = remote_port;
+        sock->state = SYN_RECV;
+        return 0; 
+    }
+
+    //如果是第二次握手包，说明sock是客户端的连接sock，此时内核的sock已经提前建立连接
+    if(pktflag == SYNACK_FLAG_MASK){
+        /* printf("client handling SYNACK\n"); */
+        sock->state = ESTABLISHED;
+        return 0; 
+    }
+
+    //如果是第三次握手包，说明sock是newsock.此时内核的sock已经提前建立连接
+    if(pktflag == ACK_FLAG_MASK){
+        /* printf("server handling ACK\n"); */
+        sock->state = ESTABLISHED;
+        tju_sock_addr local_addr, remote_addr;
+        /*
+        这里涉及到TCP连接的建立
+        正常来说应该是收到客户端发来的SYN报文
+        从中拿到对端的IP和PORT
+        换句话说 下面的处理流程其实不应该放在这里 应该在tju_handle_packet中
+        */ 
+        tju_tcp_t* new_conn = connecting_sock;
+        remote_addr.ip = inet_network("172.17.0.2");  //具体的IP地址
+        remote_addr.port = 5678;  //端口
+        local_addr.ip = sock->bind_addr.ip;  //具体的IP地址
+        local_addr.port = sock->bind_addr.port;  //端口
+        new_conn->established_local_addr = local_addr;
+        new_conn->established_remote_addr = remote_addr;
+        // 如果new_conn的创建过程放到了tju_handle_packet中 那么accept怎么拿到这个new_conn呢
+        // 在linux中 每个listen socket都维护一个已经完成连接的socket队列
+        // 每次调用accept 实际上就是取出这个队列中的一个元素
+        // 队列为空,则阻塞 
+        return 0; 
+    }
+
+
+
+
+
     uint32_t data_len = get_plen(pkt) - DEFAULT_HEADER_LEN;
 
     // 把收到的数据放到接受缓冲区

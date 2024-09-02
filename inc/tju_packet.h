@@ -16,6 +16,7 @@
 
 #define DEFAULT_HEADER_LEN 20
 #define SYN_FLAG_MASK 0x8
+#define SYNACK_FLAG_MASK 0x6
 #define ACK_FLAG_MASK 0x4
 #define FIN_FLAG_MASK 0x2
 

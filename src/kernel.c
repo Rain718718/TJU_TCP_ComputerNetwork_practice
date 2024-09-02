@@ -4,7 +4,7 @@
 */
 void onTCPPocket(char* pkt){
     // 当我们收到TCP包时 包中 源IP 源端口 是发送方的 也就是我们眼里的 远程(remote) IP和端口
-    uint16_t remote_port = get_src(pkt);
+    uint16_t remote_port = get_src(pkt);  //get的返回值已经是本机字节序了
     uint16_t local_port = get_dst(pkt);
     // remote ip 和 local ip 是读IP 数据包得到的 仿真的话这里直接根据hostname判断
 
@@ -18,10 +18,36 @@ void onTCPPocket(char* pkt){
         local_ip = inet_network("172.17.0.2");
         remote_ip = inet_network("172.17.0.3");
     }
-
+    
     int hashval;
     // 根据4个ip port 组成四元组 查找有没有已经建立连接的socket
     hashval = cal_hash(local_ip, local_port, remote_ip, remote_port);
+
+    //客户端收到第二次握手包就要建立连接
+    if(strcmp(hostname,"client")==0){ // 自己是客户端 远端就是服务端 
+        uint8_t pktflag = get_flags(pkt);
+        if(pktflag == SYNACK_FLAG_MASK){
+            /* printf("kernel recved SYNACK\n"); */
+            established_socks[hashval] = connecting_sock;
+        }
+    }
+
+     //服务都端收到第三次握手包就要建立连接
+    if(strcmp(hostname,"server")==0){ // 自己是客户端 远端就是服务端 
+        uint8_t pktflag = get_flags(pkt);
+        if(pktflag == ACK_FLAG_MASK){
+            if(established_socks[hashval] == NULL ){
+                established_socks[hashval] = connecting_sock;
+                /* printf("kernel recved ACK\n"); */
+                hashval = cal_hash(local_ip, local_port, 0, 0); 
+                //交付给监听sock
+                if (listen_socks[hashval]!=NULL){
+                    tju_handle_packet(listen_socks[hashval], pkt);
+                    return;
+                }
+            }
+        }
+    }
 
     // 首先查找已经建立连接的socket哈希表
     if (established_socks[hashval]!=NULL){
