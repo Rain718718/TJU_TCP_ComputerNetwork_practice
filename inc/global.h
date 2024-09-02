@@ -16,10 +16,12 @@
 #include <sys/select.h>
 #include <arpa/inet.h>
 
+#define QUEUE_LEN 32
+
 // 单位是byte
 #define SIZE32 4
 #define SIZE16 2
-#define SIZE8  1
+#define SIZE8 1
 
 // 一些Flag
 #define NO_FLAG 0
@@ -29,8 +31,12 @@
 #define FALSE 0
 
 // 定义最大包长 防止IP层分片
-#define MAX_DLEN 1375 	// 最大包内数据长度
-#define MAX_LEN 1400 	// 最大包长度
+#define MAX_DLEN 1375 // 最大包内数据长度
+#define MAX_LEN 1400  // 最大包长度
+
+// TCP seq Start
+#define CLIENT_ISN 0
+#define SERVER_ISN 0
 
 // TCP socket 状态定义
 #define CLOSED 0
@@ -51,69 +57,79 @@
 #define FAST_RECOVERY 2
 
 // TCP 接受窗口大小
-#define TCP_RECVWN_SIZE 32*MAX_DLEN // 比如最多放32个满载数据包
+#define TCP_RECVWN_SIZE 32 * MAX_DLEN // 比如最多放32个满载数据包
 
 // TCP 发送窗口
 // 注释的内容如果想用就可以用 不想用就删掉 仅仅提供思路和灵感
-typedef struct {
+typedef struct
+{
 	uint16_t window_size;
 
-//   uint32_t base;
-//   uint32_t nextseq;
-//   uint32_t estmated_rtt;
-//   int ack_cnt;
-//   pthread_mutex_t ack_cnt_lock;
-//   struct timeval send_time;
-//   struct timeval timeout;
-//   uint16_t rwnd; 
-//   int congestion_status;
-//   uint16_t cwnd; 
-//   uint16_t ssthresh; 
+	//   uint32_t base;
+	//   uint32_t nextseq;
+	//   uint32_t estmated_rtt;
+	//   int ack_cnt;
+	//   pthread_mutex_t ack_cnt_lock;
+	//   struct timeval send_time;
+	//   struct timeval timeout;
+	//   uint16_t rwnd;
+	//   int congestion_status;
+	//   uint16_t cwnd;
+	//   uint16_t ssthresh;
 } sender_window_t;
 
 // TCP 接受窗口
 // 注释的内容如果想用就可以用 不想用就删掉 仅仅提供思路和灵感
-typedef struct {
+typedef struct
+{
 	char received[TCP_RECVWN_SIZE];
 
-//   received_packet_t* head;
-//   char buf[TCP_RECVWN_SIZE];
-//   uint8_t marked[TCP_RECVWN_SIZE];
-//   uint32_t expect_seq;
+	//   received_packet_t* head;
+	//   char buf[TCP_RECVWN_SIZE];
+	//   uint8_t marked[TCP_RECVWN_SIZE];
+	//   uint32_t expect_seq;
 } receiver_window_t;
 
 // TCP 窗口 每个建立了连接的TCP都包括发送和接受两个窗口
-typedef struct {
-	sender_window_t* wnd_send;
-  	receiver_window_t* wnd_recv;
+typedef struct
+{
+	sender_window_t *wnd_send;
+	receiver_window_t *wnd_recv;
 } window_t;
 
-typedef struct {
+typedef struct
+{
 	uint32_t ip;
 	uint16_t port;
 } tju_sock_addr;
 
-
 // TJU_TCP 结构体 保存TJU_TCP用到的各种数据
-typedef struct {
+typedef struct
+{
 	int state; // TCP的状态
 
-	tju_sock_addr bind_addr; // 存放bind和listen时该socket绑定的IP和端口
-	tju_sock_addr established_local_addr; // 存放建立连接后 本机的 IP和端口
+	tju_sock_addr bind_addr;			   // 存放bind和listen时该socket绑定的IP和端口
+	tju_sock_addr established_local_addr;  // 存放建立连接后 本机的 IP和端口
 	tju_sock_addr established_remote_addr; // 存放建立连接后 连接对方的 IP和端口
 
 	pthread_mutex_t send_lock; // 发送数据锁
-	char* sending_buf; // 发送数据缓存区
-	int sending_len; // 发送数据缓存长度
+	char *sending_buf;		   // 发送数据缓存区
+	int sending_len;		   // 发送数据缓存长度
 
 	pthread_mutex_t recv_lock; // 接收数据锁
-	char* received_buf; // 接收数据缓存区
-	int received_len; // 接收数据缓存长度
+	char *received_buf;		   // 接收数据缓存区
+	int received_len;		   // 接收数据缓存长度
 
 	pthread_cond_t wait_cond; // 可以被用来唤醒recv函数调用时等待的线程
 
 	window_t window; // 发送和接受窗口
 
 } tju_tcp_t;
+
+typedef struct
+{
+	tju_tcp_t *syns_queue[QUEUE_LEN];
+	tju_tcp_t *accept_queue[QUEUE_LEN];
+} tju_sock_queue;
 
 #endif
