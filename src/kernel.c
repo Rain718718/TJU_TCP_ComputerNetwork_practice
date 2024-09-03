@@ -23,6 +23,8 @@ void onTCPPocket(char* pkt){
     // 根据4个ip port 组成四元组 查找有没有已经建立连接的socket
     hashval = cal_hash(local_ip, local_port, remote_ip, remote_port);
 
+    //服务端收到第一次握手包内核不用处理，直接交付给对应listensock即可
+
     //客户端收到第二次握手包就要建立连接
     if(strcmp(hostname,"client")==0){ // 自己是客户端 远端就是服务端 
         uint8_t pktflag = get_flags(pkt);
@@ -32,16 +34,20 @@ void onTCPPocket(char* pkt){
         }
     }
 
-     //服务都端收到第三次握手包就要建立连接
+     //服务端收到第三次握手包就要建立连接
     if(strcmp(hostname,"server")==0){ // 自己是客户端 远端就是服务端 
         uint8_t pktflag = get_flags(pkt);
-        if(pktflag == ACK_FLAG_MASK){
+        uint16_t plen = get_plen(pkt);
+
+        if(pktflag == ACK_FLAG_MASK && plen == DEFAULT_HEADER_LEN){
             if(established_socks[hashval] == NULL ){
                 established_socks[hashval] = connecting_sock;
                 /* printf("kernel recved ACK\n"); */
                 hashval = cal_hash(local_ip, local_port, 0, 0); 
-                //交付给监听sock
+                //交付给监听sock，否则会直接交付给newsock
                 if (listen_socks[hashval]!=NULL){
+                    /* 上面的判断是为了防止出现为建立连接，且listensock未在侦听
+                    出现client直接发送ack包的行为 */
                     tju_handle_packet(listen_socks[hashval], pkt);
                     return;
                 }
