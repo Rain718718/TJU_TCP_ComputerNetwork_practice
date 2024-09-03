@@ -130,6 +130,7 @@ typedef struct
 {
 	tju_tcp_t *syns_queue[QUEUE_LEN];
 	tju_tcp_t *accept_queue[QUEUE_LEN];
+	time_t syns_queue_wait[QUEUE_LEN];   //表示半连接队列的中sock的滞留时间
 } tju_sock_queue;
 
 #endif

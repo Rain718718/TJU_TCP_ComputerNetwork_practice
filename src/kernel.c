@@ -14,19 +14,19 @@ void onTCPPocket(char *pkt)
     uint32_t remote_ip, local_ip;
     if (strcmp(hostname, "server") == 0)
     { // 自己是服务端 远端就是客户端
-        local_ip = inet_network("172.17.0.6");
-        remote_ip = inet_network("172.17.0.5");
+        local_ip = inet_network("172.17.0.3");
+        remote_ip = inet_network("172.17.0.2");
     }
     else if (strcmp(hostname, "client") == 0)
     { // 自己是客户端 远端就是服务端
-        local_ip = inet_network("172.17.0.5");
-        remote_ip = inet_network("172.17.0.6");
+        local_ip = inet_network("172.17.0.2");
+        remote_ip = inet_network("172.17.0.3");
     }
 
     int hashval;
     // 根据4个ip port 组成四元组 查找有没有已经建立连接的socket
     hashval = cal_hash(local_ip, local_port, remote_ip, remote_port);
-
+    
     // 首先查找已经建立连接的socket哈希表
     if (established_socks[hashval] != NULL)
     {
@@ -41,7 +41,7 @@ void onTCPPocket(char *pkt)
         tju_handle_packet(listen_socks[hashval], pkt);
         return;
     }
-
+    
     // 都没找到 丢掉数据包
     printf("找不到能够处理该TCP数据包的socket, 丢弃该数据包\n");
     return;
@@ -70,12 +70,12 @@ void sendToLayer3(char *packet_buf, int packet_len)
     int rst;
     if (strcmp(hostname, "server") == 0)
     {
-        conn.sin_addr.s_addr = inet_addr("172.17.0.5");
+        conn.sin_addr.s_addr = inet_addr("172.17.0.2");
         rst = sendto(BACKEND_UDPSOCKET_ID, packet_buf, packet_len, 0, (struct sockaddr *)&conn, sizeof(conn));
     }
     else if (strcmp(hostname, "client") == 0)
     {
-        conn.sin_addr.s_addr = inet_addr("172.17.0.6");
+        conn.sin_addr.s_addr = inet_addr("172.17.0.3");
         rst = sendto(BACKEND_UDPSOCKET_ID, packet_buf, packet_len, 0, (struct sockaddr *)&conn, sizeof(conn));
     }
     else
