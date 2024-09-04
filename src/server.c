@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     // printf("my_tcp state %d\n", my_server->state);
 
     tju_sock_addr bind_addr;
-    bind_addr.ip = inet_network("172.17.0.6");
+    bind_addr.ip = inet_network("172.17.0.3");
     bind_addr.port = 1234;
 
     tju_bind(my_server, bind_addr);
@@ -44,5 +44,6 @@ int main(int argc, char **argv)
     tju_recv(new_conn, (void *)buf, 10);
     printf("server recv %s\n", buf);
 
+    sleep(50);
     return EXIT_SUCCESS;
 }

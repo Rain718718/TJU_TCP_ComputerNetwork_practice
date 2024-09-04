@@ -1,0 +1,6 @@
+Client 端发送了第一次握手
+Client 端发送了第三次握手，建立成功
+阻塞结束
+[断开连接测试-客户端] 调用 tju_close
+Client 端发送了FIN报文
+Client 端接收到了ACK报文

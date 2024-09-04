@@ -43,16 +43,16 @@ int tju_connect(tju_tcp_t *sock, tju_sock_addr target_addr);
 int tju_send(tju_tcp_t *sock, const void *buffer, int len);
 int tju_recv(tju_tcp_t *sock, void *buffer, int len);
 
-/*
-关闭一个TCP连接
-这里涉及到四次挥手
-*/
-int tju_close(tju_tcp_t *sock);
-
 int tju_handle_packet(tju_tcp_t *sock, char *pkt);
 
 tju_tcp_t *acc_pop(tju_sock_queue *q);
 tju_tcp_t *acc_push(tju_sock_queue *q, tju_tcp_t *new_socket);
 tju_tcp_t *syn_pop(tju_sock_queue *q);
 tju_tcp_t *syn_push(tju_sock_queue *q, tju_tcp_t *new_socket);
+
+/*
+关闭一个TCP连接
+这里涉及到四次挥手
+*/
+int tju_close(tju_tcp_t *sock);
 #endif

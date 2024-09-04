@@ -98,7 +98,7 @@ tju_tcp_t *tju_accept(tju_tcp_t *listen_sock)
      从中拿到对端的IP和PORT
      换句话说 下面的处理流程其实不应该放在这里 应该在tju_handle_packet中
     */
-    remote_addr.ip = inet_network("172.17.0.5"); // 具体的IP地址
+    remote_addr.ip = inet_network("172.17.0.2"); // 具体的IP地址
     remote_addr.port = 5678;                     // 端口
 
     local_addr.ip = listen_sock->bind_addr.ip;     // 具体的IP地址
@@ -134,7 +134,7 @@ int tju_connect(tju_tcp_t *sock, tju_sock_addr target_addr)
     sock->established_remote_addr = target_addr;
 
     tju_sock_addr local_addr;
-    local_addr.ip = inet_network("172.17.0.5");
+    local_addr.ip = inet_network("172.17.0.2");
     local_addr.port = 5678; // 连接方进行connect连接的时候 内核中是随机分配一个可用的端口
     sock->established_local_addr = local_addr;
 
@@ -259,7 +259,7 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
             tju_tcp_t *new_sock = (tju_tcp_t *)malloc(sizeof(tju_tcp_t));
             memcpy(new_sock, sock, sizeof(tju_tcp_t));
             tju_sock_addr remote_addr, local_addr;
-            remote_addr.ip = inet_network("172.17.0.5"); // Listen 是 server 端的行为，所以远程地址就是 172.17.0.5
+            remote_addr.ip = inet_network("172.17.0.2"); // Listen 是 server 端的行为，所以远程地址就是 172.17.0.2
             remote_addr.port = pkt_src;
             local_addr.ip = sock->bind_addr.ip;
             local_addr.port = sock->bind_addr.port;
@@ -273,7 +273,6 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
 
             // 发送SYN+ACK报文
             char *shakehand;
-            printf("%d\n", pkt_seq);
             shakehand = create_packet_buf(new_sock->established_local_addr.port, new_sock->established_remote_addr.port, SERVER_ISN, pkt_seq + 1, DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, ACK_FLAG_MASK | SYN_FLAG_MASK, 1, 0, NULL, 0);
             sendToLayer3(shakehand, 20);
             printf("发送ACK_FLAG_MASK\n");
@@ -310,12 +309,70 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
             printf("Server 端接收到了FIN报文\n");
         }
     }
+    else if (sock->state == ESTABLISHED)
+    {
+        if (pkt_flag == FIN_FLAG_MASK)
+        {
+            sock->state = CLOSE_WAIT;
+            char *msg;
+            msg = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, pkt_ack, pkt_seq + 1, DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, ACK_FLAG_MASK, 1, 0, NULL, 0);
+            sendToLayer3(msg, DEFAULT_HEADER_LEN);
+            printf("Server 端发送了ACK报文\n");
+            sock->state = CLOSE_WAIT;
+            while (sock->sending_len != 0)
+            {
+                // TODO: 阻塞
+            }
+            msg = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, pkt_ack, pkt_seq + 1, DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, FIN_FLAG_MASK | ACK_FLAG_MASK, 1, 0, NULL, 0);
+            sendToLayer3(msg, DEFAULT_HEADER_LEN);
+            printf("Server 端发送了FIN报文\n");
+            sock->state = LAST_ACK;
+        }
+    }
+    else if (sock->state == CLOSE_WAIT)
+    {
+        if (pkt_flag == FIN_FLAG_MASK)
+        {
+            sock->state = LAST_ACK;
+            char *msg;
+            msg = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, pkt_ack, pkt_seq + 1, DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, ACK_FLAG_MASK, 1, 0, NULL, 0);
+            sendToLayer3(msg, DEFAULT_HEADER_LEN);
+            printf("Server 端发送了ACK报文\n");
+            sock->state = LAST_ACK;
+        }
+    }
+    else if (sock->state == LAST_ACK)
+    {
+        if (pkt_flag == ACK_FLAG_MASK)
+        {
+            sock->state = CLOSED;
+            printf("Server 端发送了ACK报文\n");
+        }
+    }
+    else if (sock->state == FIN_WAIT_1)
+    {
+        if (pkt_flag == ACK_FLAG_MASK)
+        {
+            sock->state = FIN_WAIT_2;
+            printf("Client 端接收到了ACK报文\n");
+        }
+    }
+    else if (sock->state == FIN_WAIT_2)
+    {
+        if (pkt_flag == FIN_FLAG_MASK | ACK_FLAG_MASK)
+        {
+            char *msg;
+            msg = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, pkt_ack, pkt_seq + 1, DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, ACK_FLAG_MASK, 1, 0, NULL, 0);
+            sendToLayer3(msg, DEFAULT_HEADER_LEN);
+            printf("Client 端发送了ACK报文\n");
+            sock->state = CLOSED;
+        }
+    }
+    else if (sock->state == CLOSED)
+    {
+        printf("连接已经关闭\n");
+    }
 
-    return 0;
-}
-
-int tju_close(tju_tcp_t *sock)
-{
     return 0;
 }
 
@@ -335,6 +392,7 @@ tju_tcp_t *acc_pop(tju_sock_queue *q)
     }
     return NULL;
 }
+
 tju_tcp_t *acc_push(tju_sock_queue *q, tju_tcp_t *new_socket)
 {
     for (int i = 0; i < QUEUE_LEN; i++)
@@ -376,4 +434,20 @@ tju_tcp_t *syn_push(tju_sock_queue *q, tju_tcp_t *new_socket)
         }
     }
     return NULL;
+}
+
+int tju_close(tju_tcp_t *sock)
+{
+    tju_packet_t *new_pack = create_packet(sock->established_local_addr.port, sock->established_remote_addr.port, 0, 0,
+                                           DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, FIN_FLAG_MASK, 1, 0, NULL, 0);
+    char *msg = packet_to_buf(new_pack);
+    sendToLayer3(msg, DEFAULT_HEADER_LEN);
+    printf("Client 端发送了FIN报文\n");
+    sock->state = FIN_WAIT_1;
+    while (sock->state != CLOSED)
+    {
+        // 阻塞
+    }
+    printf("closed\n");
+    return 0;
 }
