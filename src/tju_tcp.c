@@ -3,6 +3,7 @@
 #define SYN_SEQ 100
 #define SYN_ACK 0
 #define SYNACK_SEQ 300
+#define DEFAULT_WAIT_TIME 100  // 单位毫秒
 
 char * syn = NULL;
 char * synack = NULL;
@@ -85,17 +86,19 @@ tju_tcp_t* tju_accept(tju_tcp_t* listen_sock){
 
     /* printf("等待第三次握手\n"); */
     //等待对方发起的第三次握手
-    time_t start_time, end_time;
-    double time_diff;
-    time(&start_time);
+    int start_time, end_time;
+    int time_diff;
+    start_time = clock();
     while(listen_sock->state == SYN_RECV){
-        time(&end_time);
+        end_time = clock();
         // 计算时间间隔
-        time_diff = difftime(end_time, start_time);
-        if( time_diff > 0.002 ){ //超时重传，阈值为2s
-            printf("retrans synack!\n");
+        time_diff =(double)(end_time - start_time)  / CLOCKS_PER_SEC * 1000;
+        
+        if( time_diff > DEFAULT_WAIT_TIME ){ //超时重传，阈值为2s
+            printf("wait : %d ms\n",time_diff);
+            printf("wait too long, retrans synack!\n");
             sendToLayer3(synack,DEFAULT_HEADER_LEN);
-            time(&start_time);
+            start_time = clock();
         }
     }
     //跳出后状态为ESTABLISHED
@@ -138,18 +141,20 @@ int tju_connect(tju_tcp_t* sock, tju_sock_addr target_addr){
     sock->state = SYN_SENT;
     
     /* printf("等待第二次握手\n"); */
-    //等待客户端的SYNACK段，等待对方发出第二次握手
-    time_t start_time, end_time;
-    double time_diff;
-    time(&start_time);
+    //等待服务端的SYNACK段，等待对方发出第二次握手
+    int start_time, end_time;
+    int time_diff;
+    start_time = clock();
     while(sock->state == SYN_SENT){
         // 计算时间间隔
-        time(&end_time);
-        time_diff = difftime(end_time, start_time);
-        if( time_diff > 0.002 ){ //超时重传，阈值为2ms
+        end_time = clock();
+        time_diff =(double)(end_time - start_time)  / CLOCKS_PER_SEC * 1000;
+        
+        if( time_diff > DEFAULT_WAIT_TIME){ //超时重传，阈值为2ms
             sendToLayer3(syn,DEFAULT_HEADER_LEN);
-            printf("retrans syn!\n");
-            time(&start_time);
+            printf("wait : %d ms\n",time_diff);
+            printf("wait too long, retrans syn!\n");
+            start_time = clock();
         }
     } 
     //得到回应后变为建立状态也就是ESTABLISHED
@@ -232,8 +237,11 @@ int tju_handle_packet(tju_tcp_t* sock, char* pkt){
         if(synack == NULL){ //初次发送才要建包
             synack = create_packet_buf(sock->bind_addr.port, sock->established_remote_addr.port, SYNACK_SEQ ,seq_num + 1,
                 DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN , SYNACK_FLAG_MASK, 1, 0, NULL, 0);
+        }else{
+            printf("retrans synack!\n");
         }
         sendToLayer3(synack,DEFAULT_HEADER_LEN);
+        
         return 0;
     }
 
@@ -249,8 +257,11 @@ int tju_handle_packet(tju_tcp_t* sock, char* pkt){
         if(ack == NULL){ //初次发送才要建包
             ack = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, SYN_SEQ+1 , seq_num + 1	,
                 DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN , ACK_FLAG_MASK, 1, 0, NULL, 0);
+        }else{
+            printf("retrans ack!\n");
         }
         sendToLayer3(ack,DEFAULT_HEADER_LEN);
+        
         return 0;
         
     }
