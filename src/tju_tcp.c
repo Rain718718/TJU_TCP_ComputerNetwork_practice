@@ -1,6 +1,6 @@
 #include "tju_tcp.h"
 
-#define DEFAULT_WAIT_TIME 1
+#define DEFAULT_WAIT_TIME 1000  //单位ms
 /*
 创建 TCP socket
 初始化对应的结构体
@@ -87,15 +87,15 @@ tju_tcp_t *tju_accept(tju_tcp_t *listen_sock)
         //检查sock队列中的半连接sock，如果出现长时间未进入accept_queue,判断出现了ack包的丢失，重传SYNACK
         for(int i = 0 ; i < QUEUE_LEN ; i ++ ){
             if( socks_queue->syns_queue[i] != NULL){  //定位到每个半连接sock
-                time_t now_time;
-                double time_diff;  
-                time(&now_time);  //获取当下时间
-                
-                time_diff = difftime(now_time, socks_queue->syns_queue_wait[i]); //计算时间差
-                if(time_diff > DEFAULT_WAIT_TIME){    //等到超过2ms，重传SYNACK
+                int now_time;
+                int time_diff;  
+                now_time = clock() ; //获取当下时间
+                time_diff = (double) (now_time - socks_queue->syns_queue_wait[i]) / CLOCKS_PER_SEC * 1000; //计算时间差
+                if(time_diff > DEFAULT_WAIT_TIME){    //等到超过DEFAULT_WAIT_TIME ms，重传SYNACK
                     sendToLayer3(synack,20);
+                    printf("wait: %d ms\n",time_diff);
                     printf("ACK lost,重传SYNACK\n");
-                    time(&socks_queue->syns_queue_wait[i]); //重新计时
+                    socks_queue->syns_queue_wait[i] = clock(); //重新计时
                 }
             }
         }  //确保半连接队列每个元素没有等待太久，及时重传
@@ -126,7 +126,7 @@ tju_tcp_t *tju_accept(tju_tcp_t *listen_sock)
      从中拿到对端的IP和PORT
      换句话说 下面的处理流程其实不应该放在这里 应该在tju_handle_packet中
     */
-    remote_addr.ip = inet_network("172.17.0.2"); // 具体的IP地址
+    remote_addr.ip = inet_network(CLIENT_ADDR); // 具体的IP地址
     remote_addr.port = 5678;                     // 端口
 
     local_addr.ip = listen_sock->bind_addr.ip;     // 具体的IP地址
@@ -162,7 +162,7 @@ int tju_connect(tju_tcp_t *sock, tju_sock_addr target_addr)
     sock->established_remote_addr = target_addr;
 
     tju_sock_addr local_addr;
-    local_addr.ip = inet_network("172.17.0.2");
+    local_addr.ip = inet_network(CLIENT_ADDR);
     local_addr.port = 5678; // 连接方进行connect连接的时候 内核中是随机分配一个可用的端口
     sock->established_local_addr = local_addr;
 
@@ -184,20 +184,21 @@ int tju_connect(tju_tcp_t *sock, tju_sock_addr target_addr)
     sendToLayer3(syn, 20);
     sock->state = SYN_SENT;
 
-    time_t start_time, end_time;
-    double time_diff = 0;
-    time(&start_time); //开始计时
+    int start_time, end_time;
+    int time_diff = 0;
+    start_time = clock(); //开始计时
     while (sock->state != ESTABLISHED)
     {
         // 阻塞
-        time(&end_time);  //结束计时
+        end_time = clock(); //结束计时
         
-        time_diff = difftime(end_time, start_time); //计算时间差
+        time_diff = (double)(end_time - start_time) / CLOCKS_PER_SEC * 1000; //计算时间差
         
-        if( time_diff > DEFAULT_WAIT_TIME ){ //超时重传，阈值为2ms
+        if( time_diff > DEFAULT_WAIT_TIME ){ //超时重传，等到超过DEFAULT_WAIT_TIME ms
+            printf("wait: %d ms\n",time_diff);
             printf("Client 重传了 SYN!\n");
             sendToLayer3(syn,DEFAULT_HEADER_LEN);
-            time(&start_time); //重新计时
+            start_time = clock(); //重新计时
         }
     }
     printf("阻塞结束\n");
@@ -300,7 +301,7 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
             tju_tcp_t *new_sock = (tju_tcp_t *)malloc(sizeof(tju_tcp_t));
             memcpy(new_sock, sock, sizeof(tju_tcp_t));
             tju_sock_addr remote_addr, local_addr;
-            remote_addr.ip = inet_network("172.17.0.2"); // Listen 是 server 端的行为，所以远程地址就是 172.17.0.5
+            remote_addr.ip = inet_network(CLIENT_ADDR); // Listen 是 server 端的行为，所以远程地址就是 172.17.0.5
             remote_addr.port = pkt_src;
             local_addr.ip = sock->bind_addr.ip;
             local_addr.port = sock->bind_addr.port;
@@ -428,7 +429,7 @@ tju_tcp_t *syn_push(tju_sock_queue *q, tju_tcp_t *new_socket)
         if (q->syns_queue[i] == NULL) //找到空位
         {
             q->syns_queue[i] = new_socket;
-            time(&q->syns_queue_wait[i]);   //记录压入时间
+            q->syns_queue_wait[i] = clock() ; //记录压入时间
             return new_socket;
         }
     }

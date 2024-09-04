@@ -1,6 +1,9 @@
 #ifndef _GLOBAL_H_
 #define _GLOBAL_H_
 
+#define CLIENT_ADDR "172.17.0.5"
+#define SERVER_ADDR "172.17.0.6"
+
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -130,7 +133,7 @@ typedef struct
 {
 	tju_tcp_t *syns_queue[QUEUE_LEN];
 	tju_tcp_t *accept_queue[QUEUE_LEN];
-	time_t syns_queue_wait[QUEUE_LEN];   //表示半连接队列的中sock的滞留时间
+	int syns_queue_wait[QUEUE_LEN];   //表示半连接队列的中sock的滞留时间
 } tju_sock_queue;
 
 #endif
