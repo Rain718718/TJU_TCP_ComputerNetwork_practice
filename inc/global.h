@@ -42,16 +42,16 @@
 #define SERVER_ISN 0
 
 // TCP socket 状态定义
-#define CLOSED 0
-#define LISTEN 1
-#define SYN_SENT 2
-#define SYN_RECV 3
-#define ESTABLISHED 4
-#define FIN_WAIT_1 5
-#define FIN_WAIT_2 6
-#define CLOSE_WAIT 7
-#define CLOSING 8
-#define LAST_ACK 9
+#define CLOSED 0                 //关闭状态，不能接受数据，不能发送数据
+#define LISTEN 1				//侦听态，不能接受数据，不能发送数据
+#define SYN_SENT 2				//Client发送SYN后的状态
+#define SYN_RECV 3				//Server接受SYN后的状态
+#define ESTABLISHED 4			//建立连接态，可以收发数据
+#define FIN_WAIT_1 5			//发送FIN，尚未收到ACK
+#define FIN_WAIT_2 6			//发送FIN，已收到ACK
+#define CLOSE_WAIT 7			//等待计时器，超时或ACK都会导致进入关闭态
+#define CLOSING 8				//尚未使用
+#define LAST_ACK 9				//对先发起close，己方再发起close后的状态
 #define TIME_WAIT 10
 
 // TCP 拥塞控制状态
