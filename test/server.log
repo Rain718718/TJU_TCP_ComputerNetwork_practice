@@ -1,0 +1,30 @@
+开启仿真
+线程收到一个整包，0x7f65e8000b60
+..............sock收到一个段,段的标志位为：SYN.....................
+Server 侦听到一个SYN段
+Server 发送SYNACK段
+线程收到一个整包，0x7f65e8000ce0
+..............sock收到一个段,段的标志位为：ACK.....................
+Server 收到 ACK 段,Server 进入 ESTABLISHED
+阻塞结束
+[服务端] 测试双方同时断开连接的情况
+正在关闭sock......
+sock 当前是 ESTABLISHE 
+sock 发送FIN段
+sock 状态切换至 FIN_WAIT_1
+线程收到一个整包，0x7f65e8000b80
+..............sock收到一个段,段的标志位为：FIN.....................
+sock 处于FIN_WAIT_1
+收到FIN,对方与本地sock同时发出断开连接的请求!
+Sock 发送了关闭连接的ACK报文
+Sock 状态切换至CLOSING
+线程收到一个整包，0x7f65e8000b80
+..............sock收到一个段,段的标志位为：ACK.....................
+sock当前为CLOSING
+sock收到ACK,双方明确现在是同时断连
+补发一个ACK段
+sock切换状态为TIME_WAIT
+The connection will be closed in SET_TIME
+wait : 2001 ms, time up!
+sock closed successfully!
+STATE TRANSFORM TO CLOSED

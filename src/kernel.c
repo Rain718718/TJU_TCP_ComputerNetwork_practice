@@ -14,13 +14,13 @@ void onTCPPocket(char *pkt)
     uint32_t remote_ip, local_ip;
     if (strcmp(hostname, "server") == 0)
     { // 自己是服务端 远端就是客户端
-        local_ip = inet_network(SERVER_ADDR);
-        remote_ip = inet_network(CLIENT_ADDR);
+        local_ip = inet_network(SERVER_IP);
+        remote_ip = inet_network(CLIENT_IP);
     }
     else if (strcmp(hostname, "client") == 0)
     { // 自己是客户端 远端就是服务端
-        local_ip = inet_network(CLIENT_ADDR);
-        remote_ip = inet_network(SERVER_ADDR);
+        local_ip = inet_network(CLIENT_IP);
+        remote_ip = inet_network(SERVER_IP);
     }
 
     int hashval;
@@ -70,12 +70,12 @@ void sendToLayer3(char *packet_buf, int packet_len)
     int rst;
     if (strcmp(hostname, "server") == 0)
     {
-        conn.sin_addr.s_addr = inet_addr(CLIENT_ADDR);
+        conn.sin_addr.s_addr = inet_addr(CLIENT_IP);
         rst = sendto(BACKEND_UDPSOCKET_ID, packet_buf, packet_len, 0, (struct sockaddr *)&conn, sizeof(conn));
     }
     else if (strcmp(hostname, "client") == 0)
     {
-        conn.sin_addr.s_addr = inet_addr(SERVER_ADDR);
+        conn.sin_addr.s_addr = inet_addr(SERVER_IP);
         rst = sendto(BACKEND_UDPSOCKET_ID, packet_buf, packet_len, 0, (struct sockaddr *)&conn, sizeof(conn));
     }
     else
@@ -112,6 +112,11 @@ void *receive_thread(void *arg)
         {
             plen = get_plen(hdr);
             pkt = malloc(plen);
+            if (pkt == NULL)
+            {
+                perror("malloc failed");
+                continue;
+            }
             buf_size = 0;
             while (buf_size < plen)
             { // 直到接收到 plen 长度的数据 接受的数据全部存在pkt中
@@ -119,8 +124,9 @@ void *receive_thread(void *arg)
                 buf_size = buf_size + n;
             }
             // 通知内核收到一个完整的TCP报文
+            printf("线程收到一个整包，%p\n" , pkt );
             onTCPPocket(pkt);
-            free(pkt);
+            //删除free(pkt);
         }
     }
 }
@@ -135,6 +141,7 @@ void *receive_thread(void *arg)
 void startSimulation()
 {
     // 对于内核 初始化监听socket哈希表和建立连接socket哈希表
+    printf("开启仿真\n");
     int index;
     for (index = 0; index < MAX_SOCK; index++)
     {

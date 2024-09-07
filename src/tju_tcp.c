@@ -16,6 +16,8 @@ char * fin = NULL;
 
 pthread_mutex_t mutex;
 
+int transing = 0;
+
 char fgnm[10][20] = {"SYN...","ACK...","SYNACK","FIN...","ZERO..","FINACK","badnum"};
 int pfindex (uint8_t flag){
     int ans = 0;
@@ -161,7 +163,7 @@ tju_tcp_t *tju_accept(tju_tcp_t *listen_sock)
      从中拿到对端的IP和PORT
      换句话说 下面的处理流程其实不应该放在这里 应该在tju_handle_packet中
     */
-    remote_addr.ip = inet_network(CLIENT_ADDR); // 具体的IP地址
+    remote_addr.ip = inet_network(CLIENT_IP); // 具体的IP地址
     remote_addr.port = 5678;                     // 端口
 
     local_addr.ip = listen_sock->bind_addr.ip;     // 具体的IP地址
@@ -197,7 +199,7 @@ int tju_connect(tju_tcp_t *sock, tju_sock_addr target_addr)
     sock->established_remote_addr = target_addr;
 
     tju_sock_addr local_addr;
-    local_addr.ip = inet_network(CLIENT_ADDR);
+    local_addr.ip = inet_network(CLIENT_IP);
     local_addr.port = 5678; // 连接方进行connect连接的时候 内核中是随机分配一个可用的端口
     sock->established_local_addr = local_addr;
 
@@ -284,7 +286,8 @@ int tju_recv(tju_tcp_t *sock, void *buffer, int len)
     { // 还剩下一些
         char *new_buf = malloc(sock->received_len - read_len);
         memcpy(new_buf, sock->received_buf + read_len, sock->received_len - read_len);
-        free(sock->received_buf);
+        (sock->received_buf);
+        sock->received_buf = NULL;
         sock->received_len -= read_len;
         sock->received_buf = new_buf;
     }
@@ -348,7 +351,7 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
             tju_tcp_t *new_sock = (tju_tcp_t *)malloc(sizeof(tju_tcp_t));
             memcpy(new_sock, sock, sizeof(tju_tcp_t));
             tju_sock_addr remote_addr, local_addr;
-            remote_addr.ip = inet_network(CLIENT_ADDR); 
+            remote_addr.ip = inet_network(CLIENT_IP); 
             remote_addr.port = pkt_src;
             local_addr.ip = sock->bind_addr.ip;
             local_addr.port = sock->bind_addr.port;
@@ -425,6 +428,15 @@ int tju_handle_packet(tju_tcp_t *sock, char *pkt)
             printf("Sock 发送了关闭连接的ACK报文\n");
             sock -> state = CLOSE_WAIT;
             printf("Sock 切换至 CLOSE_WAIT \n");
+            while(transing != 0){ }
+            
+            printf("当前已无无数据传输！\n");
+            fin = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, pkt_ack, pkt_seq + 1,
+                 DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, (FIN_FLAG_MASK | ACK_FLAG_MASK), 1, 0, NULL, 0);
+            sendToLayer3(fin,DEFAULT_HEADER_LEN);
+            printf("sock 发送FINACK段\n");
+            
+            
         }
         else {
             //空语句
@@ -541,7 +553,7 @@ int tju_close(tju_tcp_t *sock)
         //切换状态，发出FIN段，等待状态切换至TIME_WAIT,同时启动计时器
         printf("sock 当前是 ESTABLISHE \n");
         fin = create_packet_buf(sock->established_local_addr.port, sock->established_remote_addr.port, 0, 0,
-            DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, (FIN_FLAG_MASK | ACK_FLAG_MASK), 1, 0, NULL, 0);
+            DEFAULT_HEADER_LEN, DEFAULT_HEADER_LEN, (FIN_FLAG_MASK ), 1, 0, NULL, 0);
         sendToLayer3(fin,DEFAULT_HEADER_LEN);
         printf("sock 发送FIN段\n");
         sock -> state = FIN_WAIT_1;
